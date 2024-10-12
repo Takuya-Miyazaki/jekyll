@@ -20,7 +20,7 @@
 - name: Layouts
   description: >-
     Specify layout directory instead of using <code>_layouts/</code> automatically.
-  option: "layout_dir: DIR"
+  option: "layouts_dir: DIR"
   flag: --layouts DIR
 
 
@@ -55,7 +55,7 @@
   flag: --lsi
 
 
-- name: Limit Posts
+- name: Limit posts
   description: Limit the number of posts to parse and publish.
   option: "limit_posts: NUM"
   flag: --limit_posts NUM
@@ -69,22 +69,35 @@
 
 - name: Verbose output
   description: Print verbose output.
+  option: "verbose: BOOL"
   flag: -V, --verbose
 
 
-- name: Silence Output
+- name: Silence output
   description: Silence the normal output from Jekyll during a build.
+  option: "quiet: BOOL"
   flag: -q, --quiet
+
+
+- name: Log level
+  description: Specify a log level among debug, info, warn, or error.
+  flag: JEKYLL_LOG_LEVEL=info
 
 
 - name: Incremental build
   description: >-
-    Enable the experimental incremental build feature. Incremental build only
-    re-builds posts and pages that have changed, resulting in significant performance
-    improvements for large sites, but may also break site generation in certain
-    cases.
+    Enable the experimental
+    <a href="/docs/configuration/incremental-regeneration/">incremental
+    build</a> feature. Incremental build only re-builds posts and pages that
+    have changed, resulting in significant performance improvements for large
+    sites, but may also break site generation in certain cases.
   option: "incremental: BOOL"
   flag: -I, --incremental
+
+
+- name: Disable bundle require
+  description: Disables the need to require gems in `:jekyll_plugins` Gemfile
+  flag: JEKYLL_NO_BUNDLER_REQUIRE=true
 
 
 - name: Liquid profiler
@@ -93,7 +106,7 @@
   flag: --profile
 
 
-- name: Strict Front Matter
+- name: Strict front matter
   description: Cause a build to fail if there is a YAML syntax error in a page's front matter.
   option: "strict_front_matter: BOOL"
   flag: --strict_front_matter

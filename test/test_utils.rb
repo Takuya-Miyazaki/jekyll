@@ -13,8 +13,8 @@ class TestUtils < JekyllUnitTest
     should "merge a drop into a hash" do
       data = { "page" => {} }
       merged = Utils.deep_merge_hashes(data, @site.site_payload)
-      assert merged.is_a? Hash
-      assert merged["site"].is_a? Drops::SiteDrop
+      assert_kind_of Hash, merged
+      assert_kind_of Drops::SiteDrop, merged["site"]
       assert_equal data["page"], merged["page"]
     end
 
@@ -22,8 +22,8 @@ class TestUtils < JekyllUnitTest
       data = { "page" => {} }
       assert_nil @site.site_payload["page"]
       merged = Utils.deep_merge_hashes(@site.site_payload, data)
-      assert merged.is_a? Drops::UnifiedPayloadDrop
-      assert merged["site"].is_a? Drops::SiteDrop
+      assert_kind_of Drops::UnifiedPayloadDrop, merged
+      assert_kind_of Drops::SiteDrop, merged["site"]
       assert_equal data["page"], merged["page"]
     end
   end
@@ -91,7 +91,7 @@ class TestUtils < JekyllUnitTest
 
   context "The \`Utils.parse_date\` method" do
     should "parse a properly formatted date" do
-      assert Utils.parse_date("2014-08-02 14:43:06 PDT").is_a? Time
+      assert_kind_of Time, Utils.parse_date("2014-08-02 14:43:06 PDT")
     end
 
     should "throw an error if the input contains no date data" do
@@ -130,11 +130,9 @@ class TestUtils < JekyllUnitTest
 
   context "The \`Utils.slugify\` method" do
     should "return nil if passed nil" do
-      begin
-        assert Utils.slugify(nil).nil?
-      rescue NoMethodError
-        assert false, "Threw NoMethodError"
-      end
+      assert_nil Utils.slugify(nil)
+    rescue NoMethodError
+      assert false, "Threw NoMethodError"
     end
 
     should "replace whitespace with hyphens" do
@@ -410,11 +408,18 @@ class TestUtils < JekyllUnitTest
       assert_nil opts[:encoding]
     end
 
-    should "add bom to encoding" do
+    should "add bom to utf-encoding" do
       opts = { "encoding" => "utf-8", :encoding => "utf-8" }
       merged = Utils.merged_file_read_opts(nil, opts)
       assert_equal "bom|utf-8", merged["encoding"]
       assert_equal "bom|utf-8", merged[:encoding]
+    end
+
+    should "not add bom to non-utf encoding" do
+      opts = { "encoding" => "ISO-8859-1", :encoding => "ISO-8859-1" }
+      merged = Utils.merged_file_read_opts(nil, opts)
+      assert_equal "ISO-8859-1", merged["encoding"]
+      assert_equal "ISO-8859-1", merged[:encoding]
     end
 
     should "preserve bom in encoding" do

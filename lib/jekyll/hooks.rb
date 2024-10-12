@@ -70,15 +70,16 @@ module Jekyll
     # register a single hook to be called later, internal API
     def self.register_one(owner, event, priority, &block)
       @registry[owner] ||= {
-        :post_init   => [],
-        :pre_render  => [],
-        :post_render => [],
-        :post_write  => [],
+        :post_init    => [],
+        :pre_render   => [],
+        :post_convert => [],
+        :post_render  => [],
+        :post_write   => [],
       }
 
       unless @registry[owner][event]
-        raise NotAvailable, "Invalid hook. #{owner} supports only the " \
-          "following hooks #{@registry[owner].keys.inspect}"
+        raise NotAvailable, "Invalid hook. #{owner} supports only the following hooks " \
+                            "#{@registry[owner].keys.inspect}"
       end
 
       raise Uncallable, "Hooks must respond to :call" unless block.respond_to? :call

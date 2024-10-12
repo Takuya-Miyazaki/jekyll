@@ -13,7 +13,7 @@ module Jekyll
       !mx.freeze
 
       FULL_VALID_SYNTAX = %r!\A\s*(?:#{VALID_SYNTAX}(?=\s|\z)\s*)*\z!.freeze
-      VALID_FILENAME_CHARS = %r!^[\w/.-]+$!.freeze
+      VALID_FILENAME_CHARS = %r!^[\w/.\-()+~\#@]+$!.freeze
       INVALID_SEQUENCES = %r![./]{2,}!.freeze
 
       def initialize(tag_name, markup, tokens)
@@ -36,20 +36,16 @@ module Jekyll
 
       def parse_params(context)
         params = {}
-        markup = @params
-
-        while (match = VALID_SYNTAX.match(markup))
-          markup = markup[match.end(0)..-1]
-
-          value = if match[2]
-                    match[2].gsub('\\"', '"')
-                  elsif match[3]
-                    match[3].gsub("\\'", "'")
-                  elsif match[4]
-                    context[match[4]]
+        @params.scan(VALID_SYNTAX) do |key, d_quoted, s_quoted, variable|
+          value = if d_quoted
+                    d_quoted.include?('\\"') ? d_quoted.gsub('\\"', '"') : d_quoted
+                  elsif s_quoted
+                    s_quoted.include?("\\'") ? s_quoted.gsub("\\'", "'") : s_quoted
+                  elsif variable
+                    context[variable]
                   end
 
-          params[match[1]] = value
+          params[key] = value
         end
         params
       end
@@ -183,8 +179,8 @@ module Jekyll
       private
 
       def could_not_locate_message(file, includes_dirs, safe)
-        message = "Could not locate the included file '#{file}' in any of "\
-          "#{includes_dirs}. Ensure it exists in one of those directories and"
+        message = "Could not locate the included file '#{file}' in any of #{includes_dirs}. " \
+                  "Ensure it exists in one of those directories and"
         message + if safe
                     " is not a symlink as those are not allowed in safe mode."
                   else
@@ -205,7 +201,7 @@ module Jekyll
         @site.inclusions[file] ||= locate_include_file(file)
         inclusion = @site.inclusions[file]
 
-        add_include_to_dependency(inclusion, context) if @site.incremental?
+        add_include_to_dependency(inclusion, context) if @site.config["incremental"]
 
         context.stack do
           context["include"] = parse_params(context) if @params
@@ -238,12 +234,17 @@ module Jekyll
       end
 
       def add_include_to_dependency(inclusion, context)
-        return unless context.registers[:page]&.key?("path")
+        page = context.registers[:page]
+        return unless page&.key?("path")
 
-        @site.regenerator.add_dependency(
-          @site.in_source_dir(context.registers[:page]["path"]),
-          inclusion.path
-        )
+        absolute_path = \
+          if page["collection"]
+            @site.in_source_dir(@site.config["collections_dir"], page["path"])
+          else
+            @site.in_source_dir(page["path"])
+          end
+
+        @site.regenerator.add_dependency(absolute_path, inclusion.path)
       end
     end
 
@@ -264,7 +265,7 @@ module Jekyll
       def resource_path(page, site)
         path = page["path"]
         path = File.join(site.config["collections_dir"], path) if page["collection"]
-        path.sub(%r!/#excerpt\z!, "")
+        path.delete_suffix("/#excerpt")
       end
     end
   end

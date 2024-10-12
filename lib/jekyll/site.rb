@@ -2,15 +2,15 @@
 
 module Jekyll
   class Site
-    attr_reader   :source, :dest, :cache_dir, :config
-    attr_accessor :layouts, :pages, :static_files, :drafts, :inclusions,
-                  :exclude, :include, :lsi, :highlighter, :permalink_style,
-                  :time, :future, :unpublished, :safe, :plugins, :limit_posts,
-                  :show_drafts, :keep_files, :baseurl, :data, :file_read_opts,
-                  :gems, :plugin_manager, :theme
+    attr_accessor :baseurl, :converters, :data, :drafts, :exclude,
+                  :file_read_opts, :future, :gems, :generators, :highlighter,
+                  :include, :inclusions, :keep_files, :layouts, :limit_posts,
+                  :lsi, :pages, :permalink_style, :plugin_manager, :plugins,
+                  :reader, :safe, :show_drafts, :static_files, :theme, :time,
+                  :unpublished
 
-    attr_accessor :converters, :generators, :reader
-    attr_reader   :regenerator, :liquid_renderer, :includes_load_paths, :filter_cache, :profiler
+    attr_reader :cache_dir, :config, :dest, :filter_cache, :includes_load_paths,
+                :liquid_renderer, :profiler, :regenerator, :source
 
     # Public: Initialize a new Site.
     #
@@ -49,7 +49,7 @@ module Jekyll
 
       %w(safe lsi highlighter baseurl exclude include future unpublished
          show_drafts limit_posts keep_files).each do |opt|
-        send("#{opt}=", config[opt])
+        send(:"#{opt}=", config[opt])
       end
 
       # keep using `gems` to avoid breaking change
@@ -117,6 +117,7 @@ module Jekyll
 
       Jekyll::Cache.clear_if_config_changed config
       Jekyll::Hooks.trigger :site, :after_reset, self
+      nil
     end
     # rubocop:enable Metrics/MethodLength
     # rubocop:enable Metrics/AbcSize
@@ -180,6 +181,7 @@ module Jekyll
       reader.read
       limit_posts!
       Jekyll::Hooks.trigger :site, :post_read, self
+      nil
     end
 
     # Run each of the Generators.
@@ -192,6 +194,7 @@ module Jekyll
         Jekyll.logger.debug "Generating:",
                             "#{generator.class} finished in #{Time.now - start} seconds."
       end
+      nil
     end
 
     # Render the site to the destination.
@@ -208,6 +211,7 @@ module Jekyll
       render_pages(payload)
 
       Jekyll::Hooks.trigger :site, :post_render, self, payload
+      nil
     end
 
     # Remove orphaned files and empty directories in destination.
@@ -215,6 +219,7 @@ module Jekyll
     # Returns nothing.
     def cleanup
       site_cleaner.cleanup!
+      nil
     end
 
     # Write static files, pages, and posts.
@@ -227,6 +232,7 @@ module Jekyll
       end
       regenerator.write_metadata
       Jekyll::Hooks.trigger :site, :post_write, self
+      nil
     end
 
     def posts
@@ -298,10 +304,10 @@ module Jekyll
     # klass - The Class of the Converter to fetch.
     def find_converter_instance(klass)
       @find_converter_instance ||= {}
-      @find_converter_instance[klass] ||= begin
-        converters.find { |converter| converter.instance_of?(klass) } || \
-          raise("No Converters found for #{klass}")
-      end
+      @find_converter_instance[klass] ||= converters.find do |converter|
+        converter.instance_of?(klass)
+      end || \
+        raise("No Converters found for #{klass}")
     end
 
     # klass - class or module containing the subclasses.
@@ -310,8 +316,9 @@ module Jekyll
     # passed in as argument.
 
     def instantiate_subclasses(klass)
-      klass.descendants.select { |c| !safe || c.safe }.sort.map do |c|
-        c.new(config)
+      klass.descendants.select { |c| !safe || c.safe }.tap do |result|
+        result.sort!
+        result.map! { |c| c.new(config) }
       end
     end
 
@@ -321,11 +328,11 @@ module Jekyll
     # Returns
     def relative_permalinks_are_deprecated
       if config["relative_permalinks"]
-        Jekyll.logger.abort_with "Since v3.0, permalinks for pages" \
-                                 " in subfolders must be relative to the" \
-                                 " site source directory, not the parent" \
-                                 " directory. Check https://jekyllrb.com/docs/upgrading/"\
-                                 " for more info."
+        Jekyll.logger.abort_with "Since v3.0, permalinks for pages " \
+                                 "in subfolders must be relative to the " \
+                                 "site source directory, not the parent " \
+                                 "directory. Check https://jekyllrb.com/docs/upgrading/ " \
+                                 "for more info."
       end
     end
 
@@ -334,6 +341,13 @@ module Jekyll
     # Returns an Array of Documents which should be written
     def docs_to_write
       documents.select(&:write?)
+    end
+
+    # Get the to be written static files
+    #
+    # Returns an Array of StaticFiles which should be written
+    def static_files_to_write
+      static_files.select(&:write?)
     end
 
     # Get all the documents
@@ -346,11 +360,9 @@ module Jekyll
     end
 
     def each_site_file
-      %w(pages static_files docs_to_write).each do |type|
-        send(type).each do |item|
-          yield item
-        end
-      end
+      pages.each { |page| yield page }
+      static_files.each { |file| yield(file) if file.write? }
+      collections.each_value { |coll| coll.docs.each { |doc| yield(doc) if doc.write? } }
     end
 
     # Returns the FrontmatterDefaults or creates a new FrontmatterDefaults
@@ -435,6 +447,13 @@ module Jekyll
       @collections_path ||= dir_str.empty? ? source : in_source_dir(dir_str)
     end
 
+    # Public
+    #
+    # Returns the object as a debug String.
+    def inspect
+      "#<#{self.class} @source=#{@source}>"
+    end
+
     private
 
     def load_theme_configuration(config)
@@ -455,7 +474,11 @@ module Jekyll
       theme_config.delete_if { |key, _| Configuration::DEFAULTS.key?(key) }
 
       # Override theme_config with existing config and return the result.
+      # Additionally ensure we return a `Jekyll::Configuration` instance instead of a Hash.
       Utils.deep_merge_hashes(theme_config, config)
+        .each_with_object(Jekyll::Configuration.new) do |(key, value), conf|
+          conf[key] = value
+        end
     end
 
     # Limits the current posts; removes the posts which exceed the limit_posts
@@ -463,7 +486,7 @@ module Jekyll
     # Returns nothing
     def limit_posts!
       if limit_posts.positive?
-        limit = posts.docs.length < limit_posts ? posts.docs.length : limit_posts
+        limit = [posts.docs.length, limit_posts].min
         posts.docs = posts.docs[-limit, limit]
       end
     end
@@ -476,10 +499,26 @@ module Jekyll
       @site_cleaner ||= Cleaner.new(self)
     end
 
+    def hide_cache_dir_from_git
+      @cache_gitignore_path ||= in_source_dir(config["cache_dir"], ".gitignore")
+      return if File.exist?(@cache_gitignore_path)
+
+      cache_dir_path = in_source_dir(config["cache_dir"])
+      FileUtils.mkdir_p(cache_dir_path) unless File.directory?(cache_dir_path)
+
+      File.open(@cache_gitignore_path, "wb") do |file|
+        file.puts("# ignore everything in this directory\n*")
+      end
+    end
+
     # Disable Marshaling cache to disk in Safe Mode
     def configure_cache
       Jekyll::Cache.cache_dir = in_source_dir(config["cache_dir"], "Jekyll/Cache")
-      Jekyll::Cache.disable_disk_cache! if safe || config["disable_disk_cache"]
+      if safe || config["disable_disk_cache"]
+        Jekyll::Cache.disable_disk_cache!
+      else
+        hide_cache_dir_from_git
+      end
     end
 
     def configure_plugins
@@ -495,8 +534,8 @@ module Jekyll
         if config["theme"].is_a?(String)
           Jekyll::Theme.new(config["theme"])
         else
-          Jekyll.logger.warn "Theme:", "value of 'theme' in config should be " \
-          "String to use gem-based themes, but got #{config["theme"].class}"
+          Jekyll.logger.warn "Theme:", "value of 'theme' in config should be String to use " \
+                                       "gem-based themes, but got #{config["theme"].class}"
           nil
         end
     end

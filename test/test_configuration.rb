@@ -111,7 +111,7 @@ class TestConfiguration < JekyllUnitTest
     should "forces posts to output" do
       result = Configuration[{ "collections" => { "posts" => { "output" => false } } }]
         .add_default_collections
-      assert_equal true, result["collections"]["posts"]["output"]
+      assert result["collections"]["posts"]["output"]
     end
   end
 
@@ -154,9 +154,9 @@ class TestConfiguration < JekyllUnitTest
     end
 
     should "always return an array" do
-      assert @config.config_files(@no_override).is_a?(Array)
-      assert @config.config_files(@one_config_file).is_a?(Array)
-      assert @config.config_files(@multiple_files).is_a?(Array)
+      assert_kind_of Array, @config.config_files(@no_override)
+      assert_kind_of Array, @config.config_files(@one_config_file)
+      assert_kind_of Array, @config.config_files(@multiple_files)
     end
 
     should "return the default config path if no config files are specified" do

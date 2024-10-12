@@ -37,6 +37,7 @@ class TestFilters < JekyllUnitTest
   context "filters" do
     setup do
       @sample_time = Time.utc(2013, 3, 27, 11, 22, 33)
+      @timezone_before_test = ENV["TZ"]
       @filter = make_filter_mock(
         "timezone"               => "UTC",
         "url"                    => "http://example.com",
@@ -53,6 +54,10 @@ class TestFilters < JekyllUnitTest
         { "color" => "red",  "size" => "medium" },
         { "color" => "blue", "size" => "medium" },
       ]
+    end
+
+    teardown do
+      ENV["TZ"] = @timezone_before_test
     end
 
     should "markdownify with simple string" do
@@ -138,7 +143,7 @@ class TestFilters < JekyllUnitTest
 
     should "sassify with simple string" do
       assert_equal(
-        "p { color: #123456; }\n",
+        "p {\n  color: #123456;\n}",
         @filter.sassify(<<~SASS)
           $blue: #123456
           p
@@ -149,7 +154,7 @@ class TestFilters < JekyllUnitTest
 
     should "scssify with simple string" do
       assert_equal(
-        "p { color: #123456; }\n",
+        "p {\n  color: #123456;\n}",
         @filter.scssify("$blue:#123456; p{color: $blue}")
       )
     end
@@ -660,6 +665,7 @@ class TestFilters < JekyllUnitTest
       should "convert drop to json" do
         @filter.site.read
         expected = {
+          "name"          => "2008-02-02-published.markdown",
           "path"          => "_posts/2008-02-02-published.markdown",
           "previous"      => nil,
           "output"        => nil,
@@ -685,7 +691,7 @@ class TestFilters < JekyllUnitTest
 
         next_doc = actual.delete("next")
         refute_nil next_doc
-        assert next_doc.is_a?(Hash), "doc.next should be an object"
+        assert_kind_of Hash, next_doc, "doc.next should be an object"
 
         assert_equal expected, actual
       end
@@ -706,12 +712,13 @@ class TestFilters < JekyllUnitTest
           [message]
         end
       end
+
       class T < Struct.new(:name)
         def to_liquid
           {
             "name" => name,
             :v     => 1,
-            :thing => M.new(:kay => "jewelers"),
+            :thing => M.new({:kay => "jewelers"}),
             :stuff => true,
           }
         end
@@ -792,25 +799,25 @@ class TestFilters < JekyllUnitTest
         grouping = @filter.group_by(@filter.site.pages, "layout")
         names = ["default", "nil", ""]
         grouping.each do |g|
-          assert names.include?(g["name"]), "#{g["name"]} isn't a valid grouping."
+          assert_includes names, g["name"], "#{g["name"]} isn't a valid grouping."
           case g["name"]
           when "default"
-            assert(
-              g["items"].is_a?(Array),
+            assert_kind_of(
+              Array, g["items"],
               "The list of grouped items for 'default' is not an Array."
             )
             # adjust array.size to ignore symlinked page in Windows
             qty = Utils::Platforms.really_windows? ? 4 : 5
             assert_equal qty, g["items"].size
           when "nil"
-            assert(
-              g["items"].is_a?(Array),
+            assert_kind_of(
+              Array, g["items"],
               "The list of grouped items for 'nil' is not an Array."
             )
             assert_equal 2, g["items"].size
           when ""
-            assert(
-              g["items"].is_a?(Array),
+            assert_kind_of(
+              Array, g["items"],
               "The list of grouped items for '' is not an Array."
             )
             # adjust array.size to ignore symlinked page in Windows
@@ -939,17 +946,29 @@ class TestFilters < JekyllUnitTest
 
         results = @filter.where(hash, "featured", "true")
         assert_equal 2, results.length
-        assert_equal 9.2, results[0]["rating"]
-        assert_equal 4.7, results[1]["rating"]
+        assert_in_delta(9.2, results[0]["rating"])
+        assert_in_delta(4.7, results[1]["rating"])
 
         results = @filter.where(hash, "rating", 4.7)
         assert_equal 1, results.length
-        assert_equal 4.7, results[0]["rating"]
+        assert_in_delta(4.7, results[0]["rating"])
       end
 
       should "always return an array if the object responds to 'select'" do
         results = @filter.where(SelectDummy.new, "obj", "1 == 1")
         assert_equal [], results
+      end
+
+      should "gracefully handle invalid property type" do
+        hash = {
+          "members" => { "name" => %w(John Jane Jimmy) },
+          "roles"   => %w(Admin Recruiter Manager),
+        }
+        err = assert_raises(TypeError) { @filter.where(hash, "name", "Jimmy") }
+        truncatd_arr_str = hash["roles"].to_liquid.to_s[0...20]
+        msg = "Error accessing object (#{truncatd_arr_str}) with given key. Expected an integer " \
+              'but got "name" instead.'
+        assert_equal msg, err.message
       end
     end
 
@@ -1022,12 +1041,12 @@ class TestFilters < JekyllUnitTest
 
         results = @filter.where_exp(hash, "item", "item.featured == true")
         assert_equal 2, results.length
-        assert_equal 9.2, results[0]["rating"]
-        assert_equal 4.7, results[1]["rating"]
+        assert_in_delta(9.2, results[0]["rating"])
+        assert_in_delta(4.7, results[1]["rating"])
 
         results = @filter.where_exp(hash, "item", "item.rating == 4.7")
         assert_equal 1, results.length
-        assert_equal 4.7, results[0]["rating"]
+        assert_in_delta(4.7, results[0]["rating"])
       end
 
       should "filter with other operators" do
@@ -1171,10 +1190,10 @@ class TestFilters < JekyllUnitTest
         }
 
         result = @filter.find(hash, "featured", "true")
-        assert_equal 9.2, result["rating"]
+        assert_in_delta(9.2, result["rating"])
 
         result = @filter.find(hash, "rating", 4.7)
-        assert_equal 4.7, result["rating"]
+        assert_in_delta(4.7, result["rating"])
       end
     end
 
@@ -1237,10 +1256,10 @@ class TestFilters < JekyllUnitTest
         }
 
         result = @filter.find_exp(hash, "item", "item.featured == true")
-        assert_equal 9.2, result["rating"]
+        assert_in_delta(9.2, result["rating"])
 
         result = @filter.find_exp(hash, "item", "item.rating == 4.7")
-        assert_equal 4.7, result["rating"]
+        assert_in_delta(4.7, result["rating"])
       end
 
       should "filter with other operators" do
@@ -1284,25 +1303,25 @@ class TestFilters < JekyllUnitTest
         groups = @filter.group_by_exp(@filter.site.pages, "page", "page.layout | upcase")
         names = ["DEFAULT", "NIL", ""]
         groups.each do |g|
-          assert names.include?(g["name"]), "#{g["name"]} isn't a valid grouping."
+          assert_includes names, g["name"], "#{g["name"]} isn't a valid grouping."
           case g["name"]
           when "DEFAULT"
-            assert(
-              g["items"].is_a?(Array),
+            assert_kind_of(
+              Array, g["items"],
               "The list of grouped items for 'default' is not an Array."
             )
             # adjust array.size to ignore symlinked page in Windows
             qty = Utils::Platforms.really_windows? ? 4 : 5
             assert_equal qty, g["items"].size
           when "nil"
-            assert(
-              g["items"].is_a?(Array),
+            assert_kind_of(
+              Array, g["items"],
               "The list of grouped items for 'nil' is not an Array."
             )
             assert_equal 2, g["items"].size
           when ""
-            assert(
-              g["items"].is_a?(Array),
+            assert_kind_of(
+              Array, g["items"],
               "The list of grouped items for '' is not an Array."
             )
             # adjust array.size to ignore symlinked page in Windows

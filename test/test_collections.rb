@@ -68,14 +68,14 @@ class TestCollections < JekyllUnitTest
       end
 
       should "have a output attribute" do
-        assert_equal false, @collection.to_liquid["output"]
+        refute @collection.to_liquid["output"]
       end
     end
 
     should "know whether it should be written or not" do
-      assert_equal false, @collection.write?
+      refute @collection.write?
       @collection.metadata["output"] = true
-      assert_equal true, @collection.write?
+      assert @collection.write?
       @collection.metadata.delete "output"
     end
   end
@@ -121,15 +121,16 @@ class TestCollections < JekyllUnitTest
     end
 
     should "create a Hash mapping label to Collection instance" do
-      assert @site.collections.is_a?(Hash)
+      assert_kind_of Hash, @site.collections
       refute_nil @site.collections["methods"]
-      assert @site.collections["methods"].is_a? Jekyll::Collection
+      assert_kind_of Jekyll::Collection, @site.collections["methods"]
     end
 
     should "collects docs in an array on the Collection object" do
-      assert @site.collections["methods"].docs.is_a? Array
+      assert_kind_of Array, @site.collections["methods"].docs
       @site.collections["methods"].docs.each do |doc|
-        assert doc.is_a? Jekyll::Document
+        assert_kind_of Jekyll::Document, doc
+        # rubocop:disable Style/WordArray
         assert_includes %w(
           _methods/configuration.md
           _methods/sanitized_path.md
@@ -142,6 +143,7 @@ class TestCollections < JekyllUnitTest
           _methods/3940394-21-9393050-fifif1323-test.md
           _methods/trailing-dots...md
         ), doc.relative_path
+        # rubocop:enable Style/WordArray
       end
     end
 
